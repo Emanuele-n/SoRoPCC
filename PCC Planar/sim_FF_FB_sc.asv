@@ -10,7 +10,10 @@ close all
 clc
 
 % Initialize parameters
-parameters;    
+parameters;
+
+% Check if shape control is requested
+if simulation
 
 % Initial state vector
 % x1(k) = q(k) ; x2(k) = q_dot(k)
@@ -48,26 +51,18 @@ controller = "FBt";
 if controller == "FE"
     % Free evolution (tau =  0)
     tau = zeros(n, N);
-end
 
-% Check if shape control is requested
-if simulation(1) == 's'
-    if controller == "FF"
-        % FF only initialization
-        tau(:,1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) );
-    
-    elseif controller == "FBr"
-        % FF+FB initialization (regulation)
-        tau(:,1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) + Kp*(qd - q0) - Kd*(q0_dot) );
-    
-    elseif controller == "FBt"
-        % FF+FB initialization (tracking)
-        tau(:,1) = double( K*q_d(:,1) + Jm(q_d(:,1))' * G_xi(map(q_d(:,1))) + Kp*(q_d(:,1) - q0) - Kd*(q0_dot) );
-    end
-elseif simulation(1) == 't'
-    disp("Temporarily there are no controllers available for task-space simulation")
-    disp("Please select a shape control simulation or switch to the MCP file")
-    return
+elseif controller == "FF"
+    % FF only initialization
+    tau(:,1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) );
+
+elseif controller == "FBr"
+    % FF+FB initialization (regulation)
+    tau(:,1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) + Kp*(qd - q0) - Kd*(q0_dot) );
+
+elseif controller == "FBt"
+    % FF+FB initialization (tracking)
+    tau(:,1) = double( K*q_d(:,1) + Jm(q_d(:,1))' * G_xi(map(q_d(:,1))) + Kp*(q_d(:,1) - q0) - Kd*(q0_dot) );
 end
 
 % Create waitbar object
@@ -87,20 +82,17 @@ for k = 1 : 1 : N
     x2(:,k) = x(n+1:end);    % q_dot
     
     % Controller update
-    % Check if shape control is requested
-    if simulation(1) == 's'
-        if controller == "FF"
-            % FF 
-            tau(:,k+1) = K*qd + Jm(qd)' * G_xi(map(qd));
+    if controller == "FF"
+        % FF 
+        tau(:,k+1) = K*qd + Jm(qd)' * G_xi(map(qd));
+
+    elseif controller == "FBr"
+        % % FF + FB (regulation)
+        tau(:,k+1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) + Kp*(qd - x1(:,k)) - Kd*(x2(:,k)) );
     
-        elseif controller == "FBr"
-            % % FF + FB (regulation)
-            tau(:,k+1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) + Kp*(qd - x1(:,k)) - Kd*(x2(:,k)) );
-        
-        elseif controller == "FBt"
-            % FF + FB (tracking)
-            tau(:,k+1) = double( K*q_d(:,k) + Jm(q_d(:,k))' * G_xi(map(q_d(:,k))) + Kp*(q_d(:,k) - x1(:,k)) - Kd*(x2(:,k)) );
-        end
+    elseif controller == "FBt"
+        % FF + FB (tracking)
+        tau(:,k+1) = double( K*q_d(:,k) + Jm(q_d(:,k))' * G_xi(map(q_d(:,k))) + Kp*(q_d(:,k) - x1(:,k)) - Kd*(x2(:,k)) );
     end
 end
 delete(bar)

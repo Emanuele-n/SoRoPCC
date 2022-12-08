@@ -65,7 +65,7 @@ q0_dot_dot = [0; 0; 0];
 % simulation = 'st';
 
 % Task-space position regulation
-% simulation = 'tpr';
+simulation = 'tpr';
 
 % Task-space position tracking
 % simulation = 'tpt';
@@ -74,7 +74,7 @@ q0_dot_dot = [0; 0; 0];
 % simulation = 'tpor';
 
 % Task-space position and orientation tracking
-simulation = 'tpot';
+% simulation = 'tpot';
 
 %% Shape control
 if simulation(1) == 's'
