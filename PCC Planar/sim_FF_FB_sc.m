@@ -1,0 +1,174 @@
+addpath(genpath('./kinematics'));
+addpath(genpath('./model functions'));
+addpath(genpath('./mpc functions'));
+addpath(genpath('./rigid robot functions'));
+addpath(genpath('./saved data'));
+addpath(genpath('./utils'));
+
+clear
+close all
+clc
+
+% Initialize parameters
+parameters;
+
+% Initial state vector
+% x1(k) = q(k) ; x2(k) = q_dot(k)
+% x(k) = [x1(k); x2(k)]
+x10 = q0;
+x20 = q0_dot;
+
+% Number of samples
+N = T/dt;
+
+% Values are stored column-by-column 
+x1 = zeros(n,N);
+x2 = zeros(n,N);
+
+% State vector initialization
+x1(:,1) = x10;
+x2(:,1) = x20;
+x = [x10; x20];
+
+%% Select your controller: comment/uncomment
+% Free evolution
+% controller = "FE"; % TO FIX
+
+% Feedforward only
+% controller = "FF";
+
+% Feedback for regulation
+% controller = "FBr";
+
+% Feedback for tracking
+controller = "FBt";
+
+%% Simulation
+% Controller initialization
+if controller == "FE"
+    % Free evolution (tau =  0)
+    tau = zeros(n, N);
+
+elseif controller == "FF"
+    % FF only initialization
+    tau(:,1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) );
+
+elseif controller == "FBr"
+    % FF+FB initialization (regulation)
+    tau(:,1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) + Kp*(qd - q0) - Kd*(q0_dot) );
+
+elseif controller == "FBt"
+    % FF+FB initialization (tracking)
+    tau(:,1) = double( K*q_d(:,1) + Jm(q_d(:,1))' * G_xi(map(q_d(:,1))) + Kp*(q_d(:,1) - q0) - Kd*(q0_dot) );
+end
+
+% Create waitbar object
+bar = waitbar(0, "Running simulation ...");
+
+tic
+for k = 1 : 1 : N
+    % Add waitbar
+    waitbar(k/N, bar);
+
+    % Discretization of the state space evolution (Euler's derivative)
+    x_dot = mpcStateFunctionCT(x, tau(:,k), params);
+    x = dt * x_dot + x;
+    
+    % Store state values
+    x1(:,k) = x(1:n);        % q
+    x2(:,k) = x(n+1:end);    % q_dot
+    
+    % Controller update
+    if controller == "FF"
+        % FF 
+        tau(:,k+1) = K*qd + Jm(qd)' * G_xi(map(qd));
+
+    elseif controller == "FBr"
+        % % FF + FB (regulation)
+        tau(:,k+1) = double( K*qd + Jm(qd)' * G_xi(map(qd)) + Kp*(qd - x1(:,k)) - Kd*(x2(:,k)) );
+    
+    elseif controller == "FBt"
+        % FF + FB (tracking)
+        tau(:,k+1) = double( K*q_d(:,k) + Jm(q_d(:,k))' * G_xi(map(q_d(:,k))) + Kp*(q_d(:,k) - x1(:,k)) - Kd*(x2(:,k)) );
+    end
+end
+delete(bar)
+disp('Done')
+toc
+
+%% Pre-plotting operations
+if controller ~= "FE"
+    tau = tau(:,1:end-1);
+
+    % Create error array [nxN] 
+    err = x1 - q_d;
+
+    % Create error norm array [1xN]
+    err_norm = zeros(1,N);
+    for i = 1 : 1 : N
+        err_norm(i) = sqrt( err(:,i)'*err(:,i) );
+    end
+end
+
+%% Plot the results
+% Create linespace to plot [1xN]
+t = linspace(0, T, N)';
+
+% Curvature
+figure('Name', 'Curvature evolution')
+for i = 1 : 1 : n
+    subplot(2, 2, i)
+    hold on
+    grid on
+    plot(t, x1(i, :));
+    plot(t, q_d(i, :));
+    xlabel('[s]')
+    ylabel('[rad]')
+    lgd = legend('$q$'+string(i), '$q_d$', 'Interpreter', 'latex', 'Location', 'best');
+    set(findall(gcf,'type','line'),'linewidth',2);
+end
+
+if controller ~= "FE"
+    % error norm
+    subplot(2, 2, 4)
+    hold on
+    grid on
+    plot(t, err_norm);
+    xlabel('[s]')
+    ylabel('[rad]')
+    lgd = legend('$|e|$', 'Interpreter', 'latex', 'Location', 'best');
+    title('Error norm')
+    set(findall(gcf,'type','line'),'linewidth',2);
+end
+
+% Controller
+figure('Name', 'Input torque')
+for i = 1 : 1 : n
+    subplot(2, 2, i)
+    hold on
+    grid on
+    plot(t, tau(i, :));
+    xlabel('[s]')
+    ylabel('[Nm]')
+    lgd = legend('$\tau$'+string(i), 'Interpreter', 'latex', 'Location', 'best');
+    set(findall(gcf,'type','line'),'linewidth',2);
+end
+
+%% Ask for animation
+ask = input('Type 1 for animation (it will require a lot of time), type 0 to end the simulation: ');
+
+if ask == 0
+    disp('Simulation ended')
+end
+
+if ask == 1
+    % Save the curvature evolution
+    save('./saved data/curvature_data.mat','x1')
+    disp('Curvature data saved in ./saved data/curvature_data.mat')
+
+    % Run the animation script
+    PCC_animation;
+end
+
+
+
